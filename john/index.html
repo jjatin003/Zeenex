@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZeeNex | Clinical Workspace - Raj Sharma</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0ea5e9;
+            --bg-dark: #020617;
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #f8fafc;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            transition: background 0.5s ease, color 0.5s ease;
+        }
+
+        .light {
+            background-color: #f8fafc;
+            color: #0f172a;
+            --glass: rgba(0, 0, 0, 0.03);
+            --glass-border: rgba(0, 0, 0, 0.1);
+            --text-main: #0f172a;
+        }
+
+        .glass-panel {
+            background: var(--glass);
+            backdrop-filter: blur(25px);
+            border: 1px solid var(--glass-border);
+        }
+
+        .tab-active {
+            border-bottom: 3px solid var(--primary);
+            color: var(--primary) !important;
+            opacity: 1 !important;
+        }
+
+        @keyframes pulse-red { 0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); } 50% { box-shadow: 0 0 30px 15px rgba(239, 68, 68, 0.1); } }
+        .alert-critical { animation: pulse-red 1.5s infinite; border: 2px solid #ef4444 !important; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 10px; }
+
+        select option {
+            background-color: #0f172a;
+            color: white;
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; color: black !important; }
+            .glass-panel { border: 1px solid #eee !important; background: white !important; backdrop-filter: none !important; }
+            .tab-active { border-bottom: none !important; color: black !important; font-weight: 800; }
+            main { margin-top: 0 !important; padding-top: 0 !important; }
+        }
+
+        /* Center Alert Modal */
+        #interaction-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(12px);
+            z-index: 300;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .interaction-popup {
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .switch { position: relative; display: inline-block; width: 42px; height: 22px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #334155; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #10b981; }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .modal-overlay {
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body class="dark overflow-x-hidden">
+
+    <!-- Interaction Center Modal -->
+    <div id="interaction-overlay" class="no-print">
+        <div class="glass-panel alert-critical max-w-lg w-full p-10 rounded-[3rem] text-center shadow-2xl">
+            <div class="w-24 h-24 bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <span class="text-5xl">🚨</span>
+            </div>
+            <h2 class="text-3xl font-black text-rose-500 uppercase tracking-tighter mb-4">Critical Warning</h2>
+            <p id="interaction-text" class="text-white font-bold text-lg leading-relaxed mb-10 px-4"></p>
+            <div class="flex gap-4">
+                <button onclick="dismissInteraction()" class="flex-1 py-5 bg-rose-600 hover:bg-rose-500 rounded-2xl font-black text-xs uppercase transition-all shadow-xl shadow-rose-600/20">Revise Rx</button>
+                <button onclick="overrideInteraction()" class="flex-1 py-5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-[10px] uppercase opacity-40">Override (Log Entry)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI Feedback Modal -->
+    <div id="global-modal" class="fixed inset-0 z-[200] modal-overlay hidden flex items-center justify-center p-6">
+        <div class="glass-panel max-w-3xl w-full p-10 rounded-[3rem] relative shadow-2xl">
+            <button onclick="closeModal()" class="absolute top-8 right-8 text-2xl opacity-50 hover:opacity-100">✕</button>
+            <div id="modal-content" class="custom-scrollbar max-h-[80vh] overflow-y-auto pr-2"></div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-50 glass-panel px-8 py-4 flex justify-between items-center no-print">
+        <div class="flex items-center gap-6">
+            <button onclick="window.history.back()" class="p-2 hover:bg-white/10 rounded-full transition-all">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white rounded-xl flex items-center justify-center p-1 shadow-lg overflow-hidden border border-sky-500/20">
+                    <img src="fav.jpeg" onerror="this.src='https://ui-avatars.com/api/?name=ZN&background=0ea5e9&color=fff'" alt="ZeeNex" class="w-full h-full object-cover">
+                </div>
+                <div>
+                    <span class="font-['Outfit'] font-black text-xl block leading-none">ZeeNex <span class="text-sky-500">Healthcare</span></span>
+                    <span class="text-[9px] uppercase tracking-widest font-bold opacity-50">Enterprise Clinical Terminal v8.4.1</span>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <button onclick="toggleTheme()" class="p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10">
+                <svg id="theme-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 9h-1m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 5a7 7 0 100 14 7 7 0 000-14z"/></svg>
+            </button>
+            <button onclick="window.print()" class="px-6 py-2.5 bg-sky-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-sky-500 shadow-xl shadow-sky-600/20 transition-all">Export PDF Report</button>
+        </div>
+    </nav>
+
+    <main class="pt-28 pb-12 px-8 max-w-[1750px] mx-auto grid grid-cols-12 gap-8">
+        
+        <!-- SIDEBAR -->
+        <aside class="col-span-12 lg:col-span-3 space-y-6">
+            <!-- Patient Profile -->
+            <div class="glass-panel p-8 rounded-[3rem] text-center relative overflow-hidden shadow-2xl">
+                <div class="absolute -top-10 -right-10 w-32 h-32 bg-sky-500/10 rounded-full blur-3xl"></div>
+                <div class="w-32 h-32 mx-auto mb-6 relative group overflow-hidden rounded-full border-4 border-sky-500 shadow-2xl">
+                    <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=1974&auto=format&fit=crop" alt="Raj Sharma" class="w-full h-full object-cover">
+                </div>
+                <h1 class="text-3xl font-['Outfit'] font-black tracking-tighter uppercase mb-1">Raj Sharma</h1>
+                <p class="text-sky-500 font-mono text-sm font-bold">UID: Z-123456</p>
+                
+                <div class="grid grid-cols-2 gap-4 mt-8">
+                    <div class="p-4 bg-white/5 rounded-2xl border border-white/5 text-left">
+                        <p class="text-[9px] text-gray-500 font-black uppercase tracking-widest">Age / Sex</p>
+                        <p class="text-xl font-black">40 / M</p>
+                    </div>
+                    <div class="p-4 bg-white/5 rounded-2xl border border-white/5 text-left">
+                        <p class="text-[9px] text-gray-500 font-black uppercase tracking-widest">Blood Type</p>
+                        <p class="text-xl font-black text-rose-500">B+</p>
+                    </div>
+                </div>
+
+                <div class="mt-8 text-left space-y-4 border-t border-white/5 pt-6">
+                    <div>
+                        <p class="text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1">Diagnosis</p>
+                        <p class="text-xs font-bold leading-relaxed text-gray-400">Acute Edematous Pancreatitis | Grade B</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-rose-500 font-black uppercase tracking-widest mb-1">Allergies</p>
+                        <p class="text-xs font-bold leading-relaxed text-rose-400">Penicillin (Anaphylaxis), Shellfish</p>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-[10px] text-gray-500 font-black uppercase tracking-widest">Insurance Status</span>
+                        <div class="flex items-center gap-2">
+                            <span id="ins-label" class="text-[10px] font-black uppercase text-emerald-500">ACTIVE</span>
+                            <label class="switch no-print">
+                                <input type="checkbox" id="insurance-toggle" checked onchange="updateInsurance()">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Medical History -->
+            <div class="glass-panel p-8 rounded-[3rem]">
+                <h3 class="text-[11px] text-sky-500 font-black uppercase tracking-[0.3em] border-l-4 border-sky-500 pl-3 mb-6">Patient History</h3>
+                <div class="space-y-4 text-[11px]">
+                    <div>
+                        <p class="text-gray-500 font-black uppercase mb-1">Surgical History</p>
+                        <p class="font-bold border-l border-white/10 pl-2">Appendectomy (2018), ORIF Right Ankle (2014)</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-500 font-black uppercase mb-1">Known Conditions</p>
+                        <p class="font-bold border-l border-white/10 pl-2">Hypertension (5 yrs), T2DM (2 yrs)</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-500 font-black uppercase mb-1">Social History</p>
+                        <p class="font-bold border-l border-white/10 pl-2">Heavy Alcohol Consumption, Former Smoker</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Real-time Vitals Panel -->
+            <div class="glass-panel p-8 rounded-[3rem]">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-[11px] text-sky-500 font-black uppercase tracking-[0.3em] border-l-4 border-sky-500 pl-3">Live Vitals</h3>
+                    <span class="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                </div>
+                <div class="space-y-5">
+                    <div class="flex justify-between items-end">
+                        <p class="text-[9px] text-gray-500 font-black uppercase">Heart Rate</p>
+                        <p class="text-xl font-black">72 <span class="text-[10px] opacity-40">BPM</span></p>
+                    </div>
+                    <div class="flex justify-between items-end">
+                        <p class="text-[9px] text-gray-500 font-black uppercase">SpO2</p>
+                        <p class="text-xl font-black text-emerald-500">98%</p>
+                    </div>
+                    <div class="flex justify-between items-end">
+                        <p class="text-[9px] text-gray-500 font-black uppercase">Temp (Oral)</p>
+                        <p class="text-xl font-black">98.4 <span class="text-[10px] opacity-40">°F</span></p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAIN SECTION -->
+        <div class="col-span-12 lg:col-span-9 space-y-8">
+            
+            <!-- Tab Switcher -->
+            <div class="flex gap-10 border-b border-white/10 px-4 no-print overflow-x-auto custom-scrollbar whitespace-nowrap">
+                <button onclick="showTab('clinical')" id="tab-clinical" class="pb-5 text-[11px] font-black uppercase tracking-[0.2em] tab-active opacity-40 hover:opacity-100 transition-all">Medical Chart</button>
+                <button onclick="showTab('rx')" id="tab-rx" class="pb-5 text-[11px] font-black uppercase tracking-[0.2em] opacity-40 hover:opacity-100 transition-all">RxPad & Counseling</button>
+                <button onclick="showTab('lab')" id="tab-lab" class="pb-5 text-[11px] font-black uppercase tracking-[0.2em] opacity-40 hover:opacity-100 transition-all">Labs & Radiology</button>
+                <button onclick="showTab('appointments')" id="tab-appointments" class="pb-5 text-[11px] font-black uppercase tracking-[0.2em] opacity-40 hover:opacity-100 transition-all text-sky-400">Appointments</button>
+                <button onclick="showTab('billing')" id="tab-billing" class="pb-5 text-[11px] font-black uppercase tracking-[0.2em] opacity-40 hover:opacity-100 transition-all text-emerald-400">Billing & Insurance</button>
+            </div>
+
+            <!-- CONTENT: CLINICAL CHART -->
+            <div id="content-clinical" class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- Progress Notes -->
+                    <div class="glass-panel p-10 rounded-[3rem]">
+                        <h3 class="text-sm font-black uppercase tracking-widest mb-8 flex items-center gap-3">
+                            <span class="p-2 bg-sky-500/10 rounded-lg text-sky-500">📝</span> Clinical Assessment
+                        </h3>
+                        <div class="space-y-6">
+                            <div class="p-6 bg-white/5 rounded-2xl border-l-4 border-sky-500">
+                                <p class="text-[10px] text-sky-500 font-black uppercase mb-2">Primary Presentation</p>
+                                <p class="text-sm leading-relaxed text-gray-400 font-medium">
+                                    Patient presents with sudden onset excruciating epigastric pain radiating to the back. Aggravated by food intake. Nausea and multiple bouts of vomiting. Physical exam shows significant epigastric tenderness and voluntary guarding.
+                                </p>
+                            </div>
+                            <div class="grid grid-cols-3 gap-4">
+                                <div class="text-center p-3 bg-white/5 rounded-xl border border-white/5">
+                                    <p class="text-[8px] text-gray-500 font-black uppercase">Fluid Bal.</p>
+                                    <p class="text-xs font-bold">+1200ml</p>
+                                </div>
+                                <div class="text-center p-3 bg-white/5 rounded-xl border border-white/5">
+                                    <p class="text-[8px] text-gray-500 font-black uppercase">Pain (VAS)</p>
+                                    <p class="text-xs font-bold">4/10</p>
+                                </div>
+                                <div class="text-center p-3 bg-white/5 rounded-xl border border-white/5">
+                                    <p class="text-[8px] text-gray-500 font-black uppercase">Urine O/P</p>
+                                    <p class="text-xs font-bold">0.8ml/kg/hr</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ward Status -->
+                    <div class="glass-panel p-10 rounded-[3rem]">
+                        <h3 class="text-sm font-black uppercase tracking-widest mb-8 flex items-center gap-3">
+                            <span class="p-2 bg-emerald-500/10 rounded-lg text-emerald-500">🏥</span> Ward Management
+                        </h3>
+                        <div class="space-y-6">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <p class="text-[10px] text-gray-500 font-black uppercase">Room / Bed</p>
+                                    <p class="text-lg font-black">Private 402-A</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-[10px] text-gray-500 font-black uppercase">Lead Nurse</p>
+                                    <p class="text-sm font-black">Sr. Anjali M.</p>
+                                </div>
+                            </div>
+                            <div class="pt-6 border-t border-white/5">
+                                <p class="text-[10px] text-emerald-500 font-black uppercase mb-4">Counseling & Education</p>
+                                <ul class="text-xs font-medium text-gray-400 space-y-2">
+                                    <li>• <span class="text-white">Disease:</span> Explained inflammation of pancreas due to enzyme activation.</li>
+                                    <li>• <span class="text-white">NPO:</span> Emphasized strict nil-per-oral to "rest" the organ.</li>
+                                    <li>• <span class="text-white">Lifestyle:</span> Counseling on complete alcohol cessation for 1 year.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline Monitor -->
+                <div class="glass-panel p-10 rounded-[3rem]">
+                    <div class="flex justify-between items-center mb-10">
+                        <h3 class="text-sm font-black uppercase tracking-widest">Historical Trends (Admission Log)</h3>
+                        <input type="date" id="history-cal" class="bg-white/5 border border-white/10 p-3 rounded-xl text-[10px] font-black outline-none uppercase no-print" onchange="loadProgression(this.value)">
+                    </div>
+                    <div id="progression-box" class="space-y-6"></div>
+                </div>
+            </div>
+
+            <!-- CONTENT: RXPAD -->
+            <div id="content-rx" class="hidden space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div class="glass-panel p-10 rounded-[3rem]">
+                    <div class="flex justify-between items-start mb-10">
+                        <div>
+                            <h2 class="text-2xl font-black font-['Outfit']">Clinical RxPad <span class="text-sky-500">Node-7</span></h2>
+                            <p class="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-1">Provider: Dr. Verma | License ID: MD-88219</p>
+                        </div>
+                        <div class="flex items-center gap-3 bg-white/5 p-3 rounded-2xl">
+                            <div class="w-2 h-2 rounded-full bg-sky-500 animate-pulse"></div>
+                            <span class="text-[9px] font-black uppercase tracking-widest">Secured Terminal</span>
+                        </div>
+                    </div>
+
+                    <!-- Drug Entry Engine -->
+                    <div class="grid grid-cols-12 gap-4 mb-10 no-print">
+                        <div class="col-span-12 md:col-span-5 relative">
+                            <label class="text-[10px] font-black text-gray-500 uppercase ml-2 mb-2 block">Medication Search</label>
+                            <input type="text" id="drug-search" placeholder="Search brands (e.g. Pan-40, Amaryl, Warfarin)..." oninput="showDrugSuggestions(this.value)" class="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-sm font-bold outline-none focus:ring-2 ring-sky-500/40 transition-all">
+                            <div id="drug-hints" class="hidden absolute top-full left-0 w-full mt-2 glass-panel rounded-2xl z-50 border border-white/10 overflow-hidden shadow-2xl max-h-60 overflow-y-auto"></div>
+                        </div>
+                        <div class="col-span-6 md:col-span-3">
+                            <label class="text-[10px] font-black text-gray-500 uppercase ml-2 mb-2 block">Dose Freq</label>
+                            <select id="drug-dose" class="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-sm font-bold outline-none h-[62px]">
+                                <option>OD (Once Daily)</option>
+                                <option>BD (Twice Daily)</option>
+                                <option>TDS (Thrice Daily)</option>
+                                <option>QID (Four Times)</option>
+                                <option>Stat (Immediate)</option>
+                                <option>HS (Bedtime)</option>
+                            </select>
+                        </div>
+                        <div class="col-span-6 md:col-span-2">
+                            <label class="text-[10px] font-black text-gray-500 uppercase ml-2 mb-2 block">Route</label>
+                            <select id="drug-route" class="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-sm font-bold outline-none h-[62px]">
+                                <option>Oral</option>
+                                <option>IV Push</option>
+                                <option>IV Infusion</option>
+                                <option>SC</option>
+                                <option>Sublingual</option>
+                            </select>
+                        </div>
+                        <div class="col-span-12 md:col-span-2 flex items-end">
+                            <button onclick="commitPrescription()" class="w-full h-[62px] bg-sky-600 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-sky-500 transition-all">Add to Chart</button>
+                        </div>
+                    </div>
+
+                    <!-- Active Regimen List -->
+                    <div class="space-y-4" id="active-rx-list"></div>
+
+                    <div class="mt-12 grid grid-cols-1 md:grid-cols-2 gap-8 border-t border-white/10 pt-10">
+                        <div>
+                            <h4 class="text-[10px] font-black text-sky-500 uppercase mb-4 tracking-widest">Counseling Checklist</h4>
+                            <p class="text-xs text-gray-400 font-medium leading-relaxed italic">"Verified no allergy to Metformin. Discussed glycemic monitoring requirements."</p>
+                        </div>
+                        <div class="text-right">
+                             <button onclick="showCounselingLog()" class="text-[10px] text-sky-500 font-black uppercase hover:underline">View Detailed Counseling Log</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONTENT: LABS & RADIOLOGY -->
+            <div id="content-lab" class="hidden space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- Labs -->
+                    <div class="glass-panel p-10 rounded-[3rem]">
+                        <h3 class="text-sm font-black uppercase tracking-widest mb-10 flex justify-between">
+                            Biochemistry Suite
+                            <span class="text-[9px] text-amber-500 border border-amber-500/20 px-2 py-1 rounded">2 CRITICALS</span>
+                        </h3>
+                        <div class="space-y-6" id="lab-data"></div>
+                    </div>
+
+                    <!-- Radiology Report -->
+                    <div class="glass-panel p-10 rounded-[3rem]">
+                        <div class="flex justify-between items-center mb-10">
+                            <h3 class="text-sm font-black uppercase tracking-widest">Imaging Panel</h3>
+                            <div class="flex gap-2">
+                                <button onclick="viewRadiologyImage('usg')" class="px-4 py-2 bg-sky-500/10 border border-sky-500/20 text-sky-500 rounded-xl text-[10px] font-black uppercase hover:bg-sky-500/20">USG Scan</button>
+                                <button onclick="viewRadiologyImage('ct')" class="px-4 py-2 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-xl text-[10px] font-black uppercase hover:bg-rose-500/20">CT Abdomen</button>
+                            </div>
+                        </div>
+                        <div class="space-y-6">
+                            <div class="p-6 bg-white/5 rounded-3xl border border-white/10">
+                                <p class="text-[10px] font-black text-sky-500 uppercase mb-3">Radiology Impression</p>
+                                <div class="space-y-4 text-xs font-medium text-gray-400 leading-relaxed">
+                                    <p><strong>PANCREAS:</strong> <span class="text-rose-400 font-bold underline">Bulky and hypoechoic</span>. Features suggestive of Acute Edematous Pancreatitis. Mild peripancreatic fluid noted.</p>
+                                    <p><strong>GALLBLADDER:</strong> Wall thickness 4.2mm (Edematous). No cholelithiasis detected.</p>
+                                </div>
+                                <div class="mt-8 pt-6 border-t border-white/5">
+                                    <p class="text-[9px] font-black text-emerald-500 uppercase mb-2">Conclusion</p>
+                                    <p class="text-sm font-black text-white italic">Clinical Stage B Pancreatitis. No necrosis identified on current scans.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONTENT: APPOINTMENTS -->
+            <div id="content-appointments" class="hidden space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div class="grid grid-cols-12 gap-8">
+                    <!-- Scheduler Form -->
+                    <div class="col-span-12 lg:col-span-5 glass-panel p-10 rounded-[3rem]">
+                        <h3 class="text-sm font-black uppercase tracking-widest mb-8">Schedule Follow-up</h3>
+                        <div class="space-y-5">
+                            <div>
+                                <label class="text-[10px] font-black text-gray-500 uppercase ml-2 mb-2 block">Department</label>
+                                <select id="apt-dept" onchange="updateDeptDocs()" class="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-sm font-bold outline-none">
+                                    <option value="GE">Gastroenterology</option>
+                                    <option value="CA">Cardiology</option>
+                                    <option value="EN">Endocrinology</option>
+                                    <option value="GS">General Surgery</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black text-gray-500 uppercase ml-2 mb-2 block">Consultant</label>
+                                <select id="apt-doc" class="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-sm font-bold outline-none"></select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black text-gray-500 uppercase ml-2 mb-2 block">Preferred Date</label>
+                                <input type="date" id="apt-date" class="w-full bg-white/5 border border-white/10 rounded-2xl p-5 text-sm font-bold outline-none">
+                            </div>
+                            <button onclick="bookAppointment()" class="w-full py-5 bg-sky-600 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-sky-500 transition-all mt-4">Confirm Appointment</button>
+                        </div>
+                    </div>
+
+                    <!-- Appointment Queue -->
+                    <div class="col-span-12 lg:col-span-7 glass-panel p-10 rounded-[3rem]">
+                        <h3 class="text-sm font-black uppercase tracking-widest mb-8">Future Bookings</h3>
+                        <div id="apt-list" class="space-y-4 max-h-[450px] overflow-y-auto custom-scrollbar pr-2">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONTENT: BILLING & INSURANCE -->
+            <div id="content-billing" class="hidden space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div class="grid grid-cols-12 gap-8">
+                    <!-- Billing Feed -->
+                    <div class="col-span-12 lg:col-span-8 glass-panel p-10 rounded-[3rem]">
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+                            <div>
+                                <h2 class="text-2xl font-black font-['Outfit'] uppercase tracking-tight">Ledger Summary</h2>
+                                <p class="text-[10px] text-gray-500 font-bold uppercase mt-1">Invoice: ZNX-2026-8821 • Node Status: SYNCED</p>
+                            </div>
+                            <div class="p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-3xl text-right">
+                                <p class="text-[10px] font-black text-emerald-500 uppercase">Live Total Estimate</p>
+                                <p id="billing-total" class="text-4xl font-black text-white">₹ 0.00</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4" id="billing-items"></div>
+
+                        <div class="mt-12 flex flex-col md:flex-row gap-6 no-print">
+                            <button onclick="processInsurance()" class="flex-1 py-5 bg-emerald-600 rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-600/20 hover:bg-emerald-500 transition-all">Authorize Claim</button>
+                            <button onclick="processCash()" class="flex-1 py-5 bg-white/5 border border-white/10 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-white/10 transition-all">Manual Cash Settle</button>
+                        </div>
+                    </div>
+
+                    <!-- Side Actions -->
+                    <div class="col-span-12 lg:col-span-4 space-y-6">
+                         <div class="glass-panel p-8 rounded-[3rem]">
+                            <h4 class="text-[11px] font-black uppercase text-sky-500 mb-6 tracking-widest">Quick Service Add</h4>
+                            <div class="space-y-4">
+                                <button onclick="addBillItem('Nursing Charge', 'Routine Monitoring', 1500)" class="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase hover:bg-white/10 text-left flex justify-between">
+                                    <span>Nursing Charge (Daily)</span>
+                                    <span>+ ₹1.5k</span>
+                                </button>
+                                <button onclick="addBillItem('Physio Session', 'Chest & Mobility', 2200)" class="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase hover:bg-white/10 text-left flex justify-between">
+                                    <span>Physio (Bedside)</span>
+                                    <span>+ ₹2.2k</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <footer class="text-center py-12 opacity-30 no-print">
+        <p class="text-[10px] uppercase tracking-[0.5em] font-black">Copyright © 2026 ZeeNex Healthcare | Clinical Node v8.4.1</p>
+    </footer>
+
+    <script>
+        // Expanded Drug Database
+        const drugDb = [
+            { n: "Pan-40", i: "Pantoprazole", c: "PPI", d: "40 mg" },
+            { n: "Warfarin", i: "Warfarin", c: "Anticoagulant", d: "5 mg" },
+            { n: "Aspirin", i: "ASA", c: "Antiplatelet", d: "75 mg" },
+            { n: "Amiodarone", i: "Amiodarone", c: "Antiarrhythmic", d: "200 mg" },
+            { n: "Simvastatin", i: "Simvastatin", c: "Statin", d: "20 mg" },
+            { n: "Clarithromycin", i: "Clarithromycin", c: "Antibiotic", d: "500 mg" },
+            { n: "Sildenafil", i: "Sildenafil", c: "PDE5 Inhibitor", d: "50 mg" },
+            { n: "Sorrate", i: "Isosorbide Dinitrate", c: "Nitrate", d: "5 mg" },
+            { n: "Metformin", i: "Metformin", c: "Biguanide", d: "500 mg" },
+            { n: "Lisinopril", i: "Lisinopril", c: "ACE Inhibitor", d: "10 mg" },
+            { n: "Spironolactone", i: "Spironolactone", c: "Diuretic", d: "25 mg" },
+            { n: "Amaryl", i: "Glimepiride", c: "Antidiabetic", d: "2 mg" },
+            { n: "Augmentin", i: "Amoxy-Clav", c: "Antibiotic", d: "625 mg" },
+            { n: "Lasix", i: "Furosemide", c: "Diuretic", d: "20 mg" }
+        ];
+
+        // Critical Interaction Logic
+        const interactions = {
+            "Warfarin+Aspirin": "CRITICAL: Synergy increases bleeding risk. Co-administration strongly discouraged.",
+            "Warfarin+Amiodarone": "CRITICAL: Amiodarone inhibits Warfarin metabolism. Reduce dose by 50% and monitor PT/INR daily.",
+            "Simvastatin+Clarithromycin": "CRITICAL: Risk of Rhabdomyolysis and acute renal failure. Suspend Simvastatin.",
+            "Sildenafil+Sorrate": "LETHAL INTERACTION: Severe refractory hypotension. NEVER co-administer Nitrates with PDE5 inhibitors.",
+            "Lisinopril+Spironolactone": "WARNING: Potential for severe hyperkalemia. Close monitoring of serum potassium required.",
+            "Metformin+Warfarin": "NOTICE: Potential for altered glycemic response. Monitor glucose and clotting time."
+        };
+
+        const deptDocs = {
+            "GE": ["Dr. Verma (Sr. Gastro)", "Dr. Iyer (Endoscopy)"],
+            "CA": ["Dr. Mehta (Cardio)", "Dr. Singh (Electrophysiology)"],
+            "EN": ["Dr. Reddy (Endo)", "Dr. Kapoor (Diabetes Spec)"],
+            "GS": ["Dr. Das (Sr. Surgeon)", "Dr. Paul (Trauma)"]
+        };
+
+        let currentMeds = [
+            { name: "Pan-40", dose: "OD (Once Daily)", route: "IV Push", id: 1 },
+            { name: "Metformin", dose: "BD (Twice Daily)", route: "Oral", id: 2 }
+        ];
+
+        let currentAppointments = [
+            { dept: "Gastroenterology", doc: "Dr. Verma", date: "2026-03-10", id: 101 }
+        ];
+
+        let billingItems = [
+            { t: "Room Charges", d: "5 Days @ 3.5k", v: 17500, time: "Synced 16 Feb" },
+            { t: "Diagnostic Panel", d: "USG + CT + Bio Suite", v: 21200, time: "Synced 16 Feb" },
+            { t: "Pharmacy Inpatient", d: "IV Antibiotics + Fluids", v: 9550, time: "Synced 17 Feb" }
+        ];
+
+        const labResults = [
+            { n: "Serum Amylase", v: "420", u: "U/L", r: "28 - 100", s: "CRITICAL" },
+            { n: "Serum Lipase", v: "680", u: "U/L", r: "13 - 60", s: "CRITICAL" },
+            { n: "WBC Count", v: "14.5", u: "k/μL", r: "4.0 - 11.0", s: "HIGH" },
+            { n: "C-Reactive Protein", v: "14.2", u: "mg/L", r: "< 1.0", s: "HIGH" },
+            { n: "Serum Creatinine", v: "0.9", u: "mg/dL", r: "0.7 - 1.3", s: "NORMAL" }
+        ];
+
+        // --- CORE FUNCTIONS ---
+
+        function toggleTheme() {
+            document.body.classList.toggle('light');
+            document.body.classList.toggle('dark');
+        }
+
+        function showTab(t) {
+            document.querySelectorAll('[id^="content-"]').forEach(c => c.classList.add('hidden'));
+            document.querySelectorAll('[id^="tab-"]').forEach(tab => tab.classList.remove('tab-active'));
+            document.getElementById(`content-${t}`).classList.remove('hidden');
+            document.getElementById(`tab-${t}`).classList.add('tab-active');
+            if(t === 'billing') renderBilling();
+        }
+
+        function updateInsurance() {
+            const toggle = document.getElementById('insurance-toggle');
+            const label = document.getElementById('ins-label');
+            label.innerText = toggle.checked ? "ACTIVE" : "EXPIRED";
+            label.className = toggle.checked ? "text-[10px] font-black uppercase text-emerald-500" : "text-[10px] font-black uppercase text-rose-500";
+        }
+
+        // --- RX LOGIC ---
+
+        function showDrugSuggestions(v) {
+            const container = document.getElementById('drug-hints');
+            if (!v) { container.classList.add('hidden'); return; }
+            const matches = drugDb.filter(d => d.n.toLowerCase().includes(v.toLowerCase()));
+            if (matches.length > 0) {
+                container.classList.remove('hidden');
+                container.innerHTML = matches.map(d => `
+                    <div class="p-4 hover:bg-sky-500/10 cursor-pointer border-b border-white/5" onclick="selectDrug('${d.n}')">
+                        <span class="font-black text-sm text-white">${d.n}</span>
+                        <span class="text-[9px] float-right text-sky-500 uppercase">${d.i}</span>
+                    </div>
+                `).join('');
+            } else { container.classList.add('hidden'); }
+        }
+
+        function selectDrug(name) {
+            document.getElementById('drug-search').value = name;
+            document.getElementById('drug-hints').classList.add('hidden');
+        }
+
+        function commitPrescription() {
+            const name = document.getElementById('drug-search').value;
+            const dose = document.getElementById('drug-dose').value;
+            const route = document.getElementById('drug-route').value;
+            if (!name) return;
+
+            // Check Interactions
+            let warning = "";
+            currentMeds.forEach(m => {
+                const key = [m.name, name].sort().join('+');
+                if (interactions[key]) warning = interactions[key];
+            });
+
+            if (warning) {
+                document.getElementById('interaction-text').innerText = warning;
+                document.getElementById('interaction-overlay').style.display = 'flex';
+                return;
+            }
+
+            actuallyAddMed(name, dose, route);
+        }
+
+        function actuallyAddMed(name, dose, route) {
+            currentMeds.unshift({ name, dose, route, id: Date.now() });
+            renderRxList();
+            document.getElementById('drug-search').value = "";
+        }
+
+        function dismissInteraction() { document.getElementById('interaction-overlay').style.display = 'none'; }
+        function overrideInteraction() {
+            const name = document.getElementById('drug-search').value;
+            const dose = document.getElementById('drug-dose').value;
+            const route = document.getElementById('drug-route').value;
+            actuallyAddMed(name, dose, route);
+            dismissInteraction();
+        }
+
+        function renderRxList() {
+            const list = document.getElementById('active-rx-list');
+            list.innerHTML = `<h4 class="text-[10px] font-black text-sky-500 uppercase tracking-widest border-b border-white/5 pb-2 mb-4">Current Bedside Rx</h4>` + 
+            currentMeds.map(m => `
+                <div class="p-5 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center group">
+                    <div class="flex gap-4 items-center">
+                        <div class="w-10 h-10 bg-sky-500/10 rounded-xl flex items-center justify-center font-black text-sky-500 text-xs">Rx</div>
+                        <div>
+                            <p class="font-black text-sm text-white">${m.name}</p>
+                            <p class="text-[9px] text-gray-500 font-bold uppercase">${m.dose} • ${m.route}</p>
+                        </div>
+                    </div>
+                    <button onclick="removeMed(${m.id})" class="opacity-0 group-hover:opacity-100 p-2 bg-rose-500/10 text-rose-500 rounded-lg no-print">✖</button>
+                </div>
+            `).join('');
+        }
+
+        function removeMed(id) {
+            currentMeds = currentMeds.filter(m => m.id !== id);
+            renderRxList();
+        }
+
+        // --- BILLING LOGIC ---
+
+        function renderBilling() {
+            const container = document.getElementById('billing-items');
+            let total = 0;
+            container.innerHTML = billingItems.map(item => {
+                total += item.v;
+                return `
+                <div class="grid grid-cols-12 p-5 bg-white/5 rounded-2xl border border-white/5 items-center">
+                    <div class="col-span-8">
+                        <p class="text-xs font-black text-white">${item.t}</p>
+                        <p class="text-[10px] text-gray-500 uppercase">${item.d}</p>
+                        <p class="text-[8px] text-sky-500 mt-1 font-mono">${item.time}</p>
+                    </div>
+                    <div class="col-span-4 text-right">
+                        <p class="text-sm font-black">₹ ${item.v.toLocaleString()}.00</p>
+                    </div>
+                </div>
+            `;}).join('');
+            document.getElementById('billing-total').innerText = `₹ ${total.toLocaleString()}.00`;
+        }
+
+        function addBillItem(title, desc, value) {
+            billingItems.unshift({ t: title, d: desc, v: value, time: "Manual Entry" });
+            renderBilling();
+        }
+
+        // --- APPOINTMENT LOGIC ---
+
+        function updateDeptDocs() {
+            const dept = document.getElementById('apt-dept').value;
+            const docSelect = document.getElementById('apt-doc');
+            docSelect.innerHTML = deptDocs[dept].map(d => `<option value="${d}">${d}</option>`).join('');
+        }
+
+        function bookAppointment() {
+            const dept = document.getElementById('apt-dept').options[document.getElementById('apt-dept').selectedIndex].text;
+            const doc = document.getElementById('apt-doc').value;
+            const date = document.getElementById('apt-date').value;
+            if(!date) return;
+            currentAppointments.unshift({ dept, doc, date, id: Date.now() });
+            renderAptList();
+            document.getElementById('apt-date').value = "";
+        }
+
+        function renderAptList() {
+            const list = document.getElementById('apt-list');
+            list.innerHTML = currentAppointments.map(a => `
+                <div class="p-5 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center group">
+                    <div class="flex gap-4">
+                        <div class="w-12 h-12 bg-sky-500/10 rounded-xl flex items-center justify-center text-xl">📅</div>
+                        <div>
+                            <p class="font-black text-sm text-white">${a.doc}</p>
+                            <p class="text-[9px] text-gray-500 font-bold uppercase tracking-widest">${a.dept}</p>
+                        </div>
+                    </div>
+                    <div class="text-right flex items-center gap-6">
+                        <p class="text-xs font-black text-sky-500 uppercase">${a.date}</p>
+                        <button onclick="removeApt(${a.id})" class="opacity-0 group-hover:opacity-100 p-2 bg-rose-500/10 text-rose-500 rounded-lg no-print">✖</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function removeApt(id) {
+            currentAppointments = currentAppointments.filter(a => a.id !== id);
+            renderAptList();
+        }
+
+        // --- UTILS ---
+
+        function openModal(content) {
+            document.getElementById('modal-content').innerHTML = content;
+            document.getElementById('global-modal').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('global-modal').classList.add('hidden'); }
+
+        function loadProgression(d) {
+            const box = document.getElementById('progression-box');
+            box.innerHTML = `
+                <div class="p-8 bg-white/5 border border-white/10 rounded-[2.5rem] animate-in fade-in duration-300">
+                    <div class="flex justify-between items-center mb-6">
+                        <span class="text-[10px] font-black text-sky-500 uppercase tracking-widest">${d} Entry</span>
+                        <span class="px-3 py-1 bg-emerald-500/10 text-emerald-500 text-[8px] font-black rounded uppercase">Verified</span>
+                    </div>
+                    <p class="text-sm font-medium text-gray-400 border-l-2 border-sky-500/30 pl-6 leading-relaxed italic">
+                        "Patient stable. Pain intensity reduced. Aggressive hydration protocol Day 2. Watching lipase trends."
+                    </p>
+                </div>
+            `;
+        }
+
+        function renderLabs() {
+            document.getElementById('lab-data').innerHTML = labResults.map(l => `
+                <div class="flex justify-between items-end border-b border-white/5 pb-3">
+                    <span class="text-xs font-bold text-gray-400">${l.n}</span>
+                    <div class="text-right">
+                        <span class="text-xl font-black ${l.s !== 'NORMAL' ? 'text-rose-500' : 'text-sky-400'}">${l.v} <span class="text-[10px] opacity-40">${l.u}</span></span>
+                        <p class="text-[8px] font-bold text-gray-500 uppercase mt-1">Ref: ${l.r}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function viewRadiologyImage(type) {
+             openModal(`
+                <h3 class="text-2xl font-black mb-6 uppercase tracking-tighter">Radiology Viewer - ${type.toUpperCase()}</h3>
+                <div class="rounded-[2rem] overflow-hidden border border-white/10 bg-black mb-6 h-96 flex items-center justify-center">
+                    <p class="text-gray-500 font-black uppercase text-xs">Medical Imaging Instance Load...</p>
+                </div>
+            `);
+        }
+
+        function showCounselingLog() {
+            openModal(`
+                <h3 class="text-2xl font-black mb-6 uppercase tracking-tighter">Counseling Activity</h3>
+                <div class="space-y-4">
+                    <div class="p-6 bg-white/5 rounded-3xl border border-white/5">
+                        <p class="text-[9px] font-black text-emerald-500 uppercase mb-2">16 Feb 2026 - 04:15 PM</p>
+                        <p class="text-sm font-medium">Alcohol cessation counseling. Discussed the direct link between binge drinking and this admission.</p>
+                    </div>
+                </div>
+            `);
+        }
+
+        function processInsurance() {
+            openModal(`<div class="text-center py-10"><h3 class="text-2xl font-black mb-4">Claim Processed</h3><p class="opacity-50 text-sm font-bold">Claim ZN-88102 submitted to TPA.</p></div>`);
+        }
+
+        function processCash() {
+            openModal(`<div class="text-center py-10"><h3 class="text-2xl font-black mb-4">Manual Settle</h3><p class="opacity-50 text-sm font-bold">Generating final invoice.</p></div>`);
+        }
+
+        window.onload = () => {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('history-cal').value = today;
+            loadProgression(today);
+            renderRxList();
+            renderBilling();
+            renderLabs();
+            renderAptList();
+            updateDeptDocs();
+        };
+    </script>
+</body>
+</html>
